@@ -1,0 +1,75 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.2'
+    id 'io.spring.dependency-management' version '1.1.6'
+    id 'com.palantir.docker' version "0.36.0"
+}
+
+group = 'org.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+def platform = project.hasProperty('platform') ? project.property('platform') : "frontend"
+
+docker {
+    if (platform == "frontend") {
+        name "ashd89/frontend:" + version
+        files "frontend/dist"
+        buildArgs(['DIST_DIR': "/"])
+        dockerfile file('Dockerfile.frontend')
+    } else {
+        name "ashd89/backend:" + version
+        files tasks.bootJar.outputs.files
+        buildArgs(['JAR_FILE': tasks.bootJar.outputs.files.singleFile.name])
+        dockerfile file('Dockerfile')
+    }
+}
+
+
+
+// .gradlew.bat docker => docker의 이미지 생성 명령어
+task buildDocker(type: Exec, dependsOn: buildFrontend) {
+    commandLine 'gradlew.bat', 'docker', '-Pplatform=backend'
+}
+
+// docker run -d ashd89/env:0.0.1-SNAPSHOT
+task dockerComposeUp(type: Exec, dependsOn: buildDocker) {
+//    commandLine 'docker', 'run', '-d', 'ashd89/env:0.0.1-SNAPSHOT'
+    environment 'DOCKER_IMAGE_TAG', version
+    commandLine 'docker-compose', 'up', '--build', '-d'
+}
+
+task buildFrontend(type: Exec) {
+    workingDir 'frontend'
+    commandLine 'C:\\Program Files\\nodejs\\npm.cmd', 'run', 'build'
+}
+
+task buildDockerFrontend(type: Exec, dependsOn: buildFrontend) {
+    workingDir project.rootDir
+    commandLine 'cmd', '/c', 'gradlew.bat', 'docker'
+}
+
+task dockerComposeUpFrontend(type: Exec, dependsOn: buildDockerFrontend) {
+    environment 'DOCKER_IMAGE_TAG', version
+    commandLine 'docker-compose', 'up', '--build', '-d'
+}
